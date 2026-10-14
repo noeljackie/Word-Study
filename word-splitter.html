@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Word Splitter: roots and affixes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EAF0F5; --surface:#FFFFFF; --ink:#17223A; --muted:#566278; --line:#C5CFDC;
+  --prefix:#0E7A82; --root:#7A3D99; --suffix:#A86B12; --good:#2B7A4B; --warn:#B23F2A;
+  --tile:#F7F9FB;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Source Serif 4", Georgia, "Times New Roman", serif;
+  --ts:clamp(18px, 5vw, 46px);
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111827; --surface:#1A2335; --ink:#E6ECF5; --muted:#9BA7BC; --line:#344360;
+    --prefix:#4CC3CB; --root:#C690E3; --suffix:#E8B24E; --good:#62C58E; --warn:#F08A72;
+    --tile:#222D43; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111827; --surface:#1A2335; --ink:#E6ECF5; --muted:#9BA7BC; --line:#344360;
+  --prefix:#4CC3CB; --root:#C690E3; --suffix:#E8B24E; --good:#62C58E; --warn:#F08A72;
+  --tile:#222D43; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.6}
+button,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--prefix);outline-offset:2px}
+.wrap{max-width:860px;margin:0 auto;padding:28px 18px 48px}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* header */
+.top h1{font-family:var(--display);font-weight:700;font-size:clamp(34px,7vw,56px);line-height:1;letter-spacing:-.02em;margin:0 0 10px}
+.top h1 .cutmark{display:inline-block;width:.12em}
+.top h1 .a{color:var(--prefix)} .top h1 .b{color:var(--root)}
+.lede{margin:0 0 20px;color:var(--muted);max-width:60ch}
+#dots{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:22px}
+.dot{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--line);background:var(--surface);font-family:var(--display);font-size:14px;cursor:pointer}
+.dot.part{border-color:var(--suffix)}
+.dot.done{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.dot.cur{box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--prefix)}
+.dot.rev{width:auto;border-radius:17px;padding:0 14px;font-family:var(--body)}
+
+/* stage */
+.stage{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px clamp(12px,3vw,32px) 26px}
+.meta{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px 18px;align-items:baseline;margin-bottom:14px}
+.count{font-family:var(--display);font-weight:500;color:var(--muted)}
+.key{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;color:var(--muted)}
+.key span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;background:var(--c)}
+.step{font-family:var(--display);font-weight:700;font-size:21px;margin:18px 0 4px}
+.hint{margin:0 0 6px;color:var(--muted);max-width:62ch}
+
+/* word board */
+.board{overflow-x:auto;padding:22px 2px 10px}
+.word{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:center;row-gap:18px;min-width:min-content}
+.piece{display:flex;flex-direction:column;align-items:center;gap:8px}
+.letters{display:flex;align-items:stretch}
+.tile{font-family:var(--display);font-weight:700;font-size:var(--ts);line-height:1;min-width:.8em;padding:.3em .1em .26em;text-align:center;background:var(--tile);border:1px solid var(--line);border-bottom-width:3px;border-radius:6px;user-select:none}
+.piece[data-l="p"] .tile{background:color-mix(in srgb,var(--prefix) 15%,var(--surface));border-color:var(--prefix)}
+.piece[data-l="r"] .tile{background:color-mix(in srgb,var(--root) 15%,var(--surface));border-color:var(--root)}
+.piece[data-l="s"] .tile{background:color-mix(in srgb,var(--suffix) 17%,var(--surface));border-color:var(--suffix)}
+.piece.wrong .tile{border-style:dashed;border-color:var(--warn)}
+.gap{width:clamp(5px,1.3vw,12px);border:0;padding:0;background:none;cursor:pointer;position:relative;flex:none}
+.gap::after{content:"";position:absolute;left:50%;top:8%;bottom:8%;border-left:2px dashed transparent;transform:translateX(-50%)}
+.gap:hover::after,.gap:focus-visible::after{border-color:var(--muted)}
+span.gap{cursor:default;width:3px}
+span.gap::after{display:none}
+.cut{width:clamp(18px,3.4vw,34px);align-self:stretch;border:0;padding:0;background:none;cursor:pointer;position:relative;flex:none;height:calc(var(--ts) * 1.62)}
+.cut::after{content:"";position:absolute;left:50%;top:-6px;bottom:-6px;width:3px;border-radius:2px;background:var(--ink);transform:translateX(-50%) rotate(8deg);animation:snap .22s ease-out}
+.cut:hover::after{background:var(--warn)}
+span.cut{cursor:default}
+span.cut::after{background:var(--line);animation:none}
+@keyframes snap{from{transform:translateX(-50%) rotate(8deg) scaleY(0)}to{transform:translateX(-50%) rotate(8deg) scaleY(1)}}
+@media (prefers-reduced-motion:reduce){.cut::after{animation:none}}
+
+.lab{font-size:14px;font-family:var(--display);font-weight:500;padding:3px 12px;border-radius:999px;border:1.5px dashed var(--line);background:var(--surface);cursor:pointer;color:var(--muted)}
+.piece[data-l="p"] .lab,.tag[data-l="p"]{color:var(--prefix);border:1.5px solid var(--prefix)}
+.piece[data-l="r"] .lab,.tag[data-l="r"]{color:var(--root);border:1.5px solid var(--root)}
+.piece[data-l="s"] .lab,.tag[data-l="s"]{color:var(--suffix);border:1.5px solid var(--suffix)}
+.tag{font-size:13px;font-family:var(--display);font-weight:500;padding:2px 10px;border-radius:999px}
+.clue{font-style:italic;font-size:16px;text-align:center;max-width:9em;line-height:1.3}
+
+/* feedback + actions */
+.fb{margin:14px auto 0;max-width:60ch;padding:10px 14px;border-radius:8px;border-left:4px solid var(--warn);background:color-mix(in srgb,var(--warn) 9%,var(--surface))}
+.fb.ok{border-color:var(--good);background:color-mix(in srgb,var(--good) 10%,var(--surface))}
+.actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:18px}
+.btn{font-family:var(--display);font-weight:500;font-size:16px;padding:10px 20px;border-radius:10px;border:1.5px solid var(--ink);background:var(--ink);color:var(--surface);cursor:pointer}
+.btn.quiet{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* predict */
+.predict{border-top:1px solid var(--line);margin-top:22px;padding-top:6px}
+textarea{width:100%;min-height:84px;padding:12px;border:1.5px solid var(--line);border-radius:10px;background:var(--tile);resize:vertical;line-height:1.5}
+textarea:disabled{opacity:.8}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+@media (max-width:600px){.compare{grid-template-columns:1fr}}
+.compare div{padding:12px 14px;border-radius:10px;border:1px solid var(--line)}
+.compare h4{margin:0 0 4px;font-family:var(--display);font-weight:500;font-size:15px;color:var(--muted)}
+.compare p{margin:0}
+.compare .real{border-color:var(--ink)}
+.rate{text-align:center;margin-top:16px}
+.rate p{margin:0 0 8px}
+.rate .btn.on{background:var(--prefix);border-color:var(--prefix);color:#fff}
+
+.nav{display:flex;justify-content:space-between;gap:10px;margin-top:18px}
+
+/* review */
+.summary{font-size:18px;margin:0 0 18px}
+.rev-item{border-top:1px solid var(--line);padding:16px 0}
+.rev-item:first-of-type{border-top:0}
+.rev-word{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.01em}
+.rev-word .p{color:var(--prefix)} .rev-word .r{color:var(--root)} .rev-word .s{color:var(--suffix)}
+.rev-word i{font-style:normal;color:var(--muted);font-weight:500;padding:0 2px}
+.rev-item dl{display:grid;grid-template-columns:auto 1fr;gap:2px 14px;margin:6px 0 0}
+.rev-item dt{color:var(--muted);font-size:15px}
+.rev-item dd{margin:0}
+.pill{display:inline-block;font-size:13px;font-family:var(--display);padding:1px 10px;border-radius:999px;border:1px solid var(--line);margin-left:8px;vertical-align:middle}
+@media print{#dots,.actions,.nav{display:none}.stage{border:0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1><span class="a">Word</span><span class="cutmark"></span><span class="b">Splitter</span></h1>
+    <p class="lede">Big words are built from smaller parts. Cut each word into its prefix, root, and suffix, then use those parts to predict what the whole word means.</p>
+    <nav id="dots" aria-label="Choose a word"></nav>
+  </header>
+  <main id="app" class="stage" aria-live="polite"></main>
+</div>
+
+<script>
+// Each part: [text, accepted labels (first is primary), meaning]
+const WORDS = [
+  {w:"unbreakable", parts:[["un","p","not"],["break","r","to split or crack"],["able","s","can be"]], def:"Not able to be broken."},
+  {w:"predictable", parts:[["pre","p","before"],["dict","r","to say"],["able","s","can be"]], def:"Able to be known or told before it happens."},
+  {w:"invisible", parts:[["in","p","not"],["vis","r","to see"],["ible","s","can be"]], def:"Not able to be seen."},
+  {w:"rejection", parts:[["re","p","back"],["ject","r","to throw"],["ion","s","the act of"]], def:"The act of refusing or turning something away (it was \u201cthrown back\u201d)."},
+  {w:"transportation", parts:[["trans","p","across"],["port","r","to carry"],["ation","s","the act of"]], def:"The act of carrying people or goods from one place to another."},
+  {w:"incredible", parts:[["in","p","not"],["cred","r","to believe"],["ible","s","can be"]], def:"So surprising that it is hard to believe."},
+  {w:"submarine", parts:[["sub","p","under"],["mar","r","sea"],["ine","s","relating to"]], def:"A ship that travels under the sea."},
+  {w:"disrespectful", parts:[["dis","p","not, the opposite of"],["respect","r","to treat with care and honor"],["ful","s","full of"]], def:"Showing a lack of respect; rude."},
+  {w:"biography", parts:[["bio","rp","life"],["graph","r","to write"],["y","s","the process or result of"]], def:"A written story of a person\u2019s life."},
+  {w:"construction", parts:[["con","p","together"],["struct","r","to build"],["ion","s","the act of"]], def:"The act of building something by putting parts together."},
+  {w:"inaudible", parts:[["in","p","not"],["aud","r","to hear"],["ible","s","can be"]], def:"Too quiet to be heard."},
+  {w:"hydrophobic", parts:[["hydro","rp","water"],["phob","r","to fear"],["ic","s","having to do with"]], def:"Pushing away or not mixing with water (as if it \u201cfears\u201d water)."},
+  {w:"nonreturnable", parts:[["non","p","not"],["re","p","back"],["turn","r","to turn or go"],["able","s","can be"]], def:"Not able to be taken back to the store."}
+];
+const NAME = {p:"Prefix", r:"Root", s:"Suffix"};
+const CYCLE = ["", "p", "r", "s"];
+const KEY = "word-splitter-v1";
+const app = document.getElementById("app");
+const dots = document.getElementById("dots");
+let S, cur = 0, view = "word", focusKey = null, predictMsg = "";
+
+function fresh(){ return WORDS.map(()=>({cuts:[], labels:{}, tries:0, partsDone:false, firstTry:false, shown:false, fb:null, wrong:[], prediction:"", checked:false, rating:null})); }
+function load(){
+  try{
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if(d && Array.isArray(d.S) && d.S.length === WORDS.length){ S = d.S; cur = Math.min(d.cur||0, WORDS.length-1); return; }
+  }catch(e){}
+  S = fresh();
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify({S, cur})); }catch(e){} }
+const esc = t => String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function correctCuts(W){ let p=0; return W.parts.slice(0,-1).map(x => (p += x[0].length)); }
+function piecesFrom(cuts, len){
+  const b = [0, ...[...cuts].sort((a,b)=>a-b), len];
+  const out = [];
+  for(let i=0;i<b.length-1;i++) out.push({start:b[i], end:b[i+1]});
+  return out;
+}
+
+function renderDots(){
+  let h = "";
+  WORDS.forEach((W,i)=>{
+    const s = S[i];
+    const cls = ["dot"];
+    if(s.rating) cls.push("done"); else if(s.partsDone || s.cuts.length) cls.push("part");
+    if(view==="word" && i===cur) cls.push("cur");
+    const status = s.rating ? "finished" : (s.partsDone ? "parts found" : "not finished");
+    h += `<button class="${cls.join(" ")}" data-go="${i}" aria-label="Word ${i+1}, ${status}"${view==="word"&&i===cur?' aria-current="step"':""}>${i+1}</button>`;
+  });
+  h += `<button class="dot rev${view==="review"?" cur":""}" data-act="review">My answers</button>`;
+  dots.innerHTML = h;
+}
+
+function boardHTML(W, s){
+  const locked = s.partsDone;
+  const cuts = locked ? correctCuts(W) : s.cuts;
+  const ps = piecesFrom(cuts, W.w.length);
+  let h = `<div class="board"><div class="word">`;
+  ps.forEach((p, pi)=>{
+    if(pi > 0){
+      h += locked ? `<span class="cut" aria-hidden="true"></span>`
+        : `<button class="cut" data-gap="${p.start}" data-focus="g${p.start}" aria-pressed="true" aria-label="Remove the cut between ${W.w[p.start-1]} and ${W.w[p.start]}"></button>`;
+    }
+    const text = W.w.slice(p.start, p.end);
+    let lab;
+    if(locked){
+      const acc = W.parts[pi][1];
+      lab = acc.includes(s.labels[p.start]) ? s.labels[p.start] : acc[0];
+    } else lab = s.labels[p.start] || "";
+    const wrong = !locked && s.wrong.includes(p.start);
+    h += `<div class="piece${wrong?" wrong":""}" data-l="${lab}"><div class="letters">`;
+    for(let i=p.start;i<p.end;i++){
+      if(i > p.start){
+        h += locked ? `<span class="gap"></span>`
+          : `<button class="gap" data-gap="${i}" data-focus="g${i}" aria-pressed="false" aria-label="Cut between ${W.w[i-1]} and ${W.w[i]}"></button>`;
+      }
+      h += `<span class="tile" aria-hidden="true">${W.w[i]}</span>`;
+    }
+    h += `</div>`;
+    if(locked){
+      h += `<span class="tag" data-l="${lab}">${NAME[lab]}</span><span class="clue">${esc(W.parts[pi][2])}</span>`;
+    } else {
+      h += `<button class="lab" data-start="${p.start}" data-focus="l${p.start}" aria-label="Part ${text}: ${lab?NAME[lab]:"no label yet"}. Tap to change.">${lab?NAME[lab]:"Label"}</button>`;
+    }
+    h += `</div>`;
+  });
+  h += `</div></div>`;
+  return h;
+}
+
+function renderWord(){
+  const W = WORDS[cur], s = S[cur];
+  let h = `<h2 class="vh">Word ${cur+1}: ${W.w}</h2>
+  <div class="meta"><span class="count">Word ${cur+1} of ${WORDS.length}</span>
+    <div class="key"><span style="--c:var(--prefix)">Prefix: comes before the root</span><span style="--c:var(--root)">Root: the core meaning</span><span style="--c:var(--suffix)">Suffix: comes after the root</span></div></div>
+  <h3 class="step">1. Break it apart</h3>`;
+  if(!s.partsDone){
+    h += `<p class="hint">Tap the space between two letters to cut there (tap the cut again to undo). Then tap each part\u2019s label to choose prefix, root, or suffix.</p>`;
+  } else {
+    h += `<p class="hint">${s.shown ? "Here are the parts and what each one means." : "You found every part. Here is what each one means."}</p>`;
+  }
+  h += boardHTML(W, s);
+  if(s.fb) h += `<p class="fb${s.fb.ok?" ok":""}">${s.fb.text}</p>`;
+  if(!s.partsDone){
+    h += `<div class="actions"><button class="btn" data-act="check">Check my parts</button>`;
+    if(s.tries >= 2) h += `<button class="btn quiet" data-act="show">Show me the parts</button>`;
+    h += `</div>`;
+  } else {
+    h += `<section class="predict"><h3 class="step">2. Predict the meaning</h3>
+      <p class="hint">Put the clues together. What do you think <strong>${W.w}</strong> means?</p>
+      <label class="vh" for="pred">Your prediction for ${W.w}</label>
+      <textarea id="pred" data-focus="pred" placeholder="I think ${W.w} means\u2026" ${s.checked?"disabled":""}>${esc(s.prediction)}</textarea>`;
+    if(predictMsg) h += `<p class="fb">${predictMsg}</p>`;
+    if(!s.checked){
+      h += `<div class="actions"><button class="btn" data-act="predict">Check my prediction</button></div>`;
+    } else {
+      h += `<div class="compare"><div><h4>Your prediction</h4><p>${esc(s.prediction)}</p></div>
+        <div class="real"><h4>Dictionary meaning</h4><p>${esc(W.def)}</p></div></div>
+        <div class="rate"><p>How close was your prediction?</p><div class="actions" style="margin-top:0">
+        ${[["nailed","Nailed it"],["close","Close"],["notyet","Not yet"]].map(([k,t])=>`<button class="btn quiet${s.rating===k?" on":""}" data-rate="${k}" aria-pressed="${s.rating===k}">${t}</button>`).join("")}
+        </div></div>`;
+    }
+    h += `</section>`;
+  }
+  h += `<div class="nav"><button class="btn quiet" data-act="prev" ${cur===0?"disabled":""}>Previous word</button>
+    <button class="btn${s.rating?"":" quiet"}" data-act="next">${cur===WORDS.length-1?"See my answers":"Next word"}</button></div>`;
+  app.innerHTML = h;
+}
+
+function renderReview(){
+  const done = S.filter(s=>s.rating).length;
+  const first = S.filter(s=>s.firstTry).length;
+  const c = k => S.filter(s=>s.rating===k).length;
+  let h = `<h2 class="step" style="margin-top:0">My answers</h2>
+    <p class="summary">Finished ${done} of ${WORDS.length} words. Parts found on the first try: ${first}. Predictions: ${c("nailed")} nailed, ${c("close")} close, ${c("notyet")} not yet.</p>`;
+  WORDS.forEach((W,i)=>{
+    const s = S[i];
+    const split = W.parts.map(p=>`<span class="${p[1][0]}">${p[0]}</span>`).join("<i>+</i>");
+    const rate = {nailed:"Nailed it", close:"Close", notyet:"Not yet"}[s.rating];
+    h += `<div class="rev-item"><div class="rev-word">${s.partsDone?split:esc(W.w)}${s.firstTry?'<span class="pill">First try</span>':""}${rate?`<span class="pill">${rate}</span>`:""}</div>
+      <dl><dt>My prediction</dt><dd>${s.checked?esc(s.prediction):"<em>Not finished</em>"}</dd>
+      ${s.checked?`<dt>Meaning</dt><dd>${esc(W.def)}</dd>`:""}</dl></div>`;
+  });
+  h += `<div class="actions"><button class="btn quiet" data-act="back">Back to the words</button>
+    <button class="btn quiet" data-act="print">Print my answers</button>
+    <button class="btn quiet" data-act="reset">Start over</button></div>`;
+  app.innerHTML = h;
+}
+
+function render(){
+  renderDots();
+  view === "review" ? renderReview() : renderWord();
+  if(focusKey){
+    const el = app.querySelector(`[data-focus="${focusKey}"]`);
+    if(el) el.focus();
+    focusKey = null;
+  }
+}
+
+function checkParts(){
+  const W = WORDS[cur], s = S[cur];
+  const correct = correctCuts(W);
+  const ps = piecesFrom(s.cuts, W.w.length);
+  const missing = correct.filter(c=>!s.cuts.includes(c)).length;
+  const extra = s.cuts.filter(c=>!correct.includes(c)).length;
+  const n = W.parts.length;
+  s.wrong = [];
+  if(missing || extra){
+    s.tries++;
+    let t;
+    if(missing && !extra) t = ps.length===1 ? `Start by cutting the word. This word has ${n} parts.` : `This word has ${n} parts, and you have ${ps.length}. Look for another place to cut.`;
+    else if(extra && !missing) t = `One of your cuts splits a part that belongs together. This word has ${n} parts.`;
+    else t = `Some of your cuts are in the wrong place. This word has ${n} parts. Try sounding out the beginning and the end.`;
+    s.fb = {text:t};
+    return;
+  }
+  if(ps.some(p=>!s.labels[p.start])){ s.fb = {text:"Your cuts are right. Now give every part a label."}; return; }
+  s.tries++;
+  ps.forEach((p,i)=>{ if(!W.parts[i][1].includes(s.labels[p.start])) s.wrong.push(p.start); });
+  if(s.wrong.length){
+    s.fb = {text:`Your cuts are right, but ${s.wrong.length===1?"one label needs":"some labels need"} another look. Check the dashed ${s.wrong.length===1?"part":"parts"}.`};
+  } else {
+    s.partsDone = true; s.firstTry = s.tries===1; s.fb = {ok:true, text: s.firstTry ? "Every part is correct on the first try." : "Every part is correct."};
+    focusKey = "pred";
+  }
+}
+
+app.addEventListener("click", e=>{
+  const t = e.target.closest("button"); if(!t) return;
+  const s = S[cur], W = WORDS[cur];
+  if(t.dataset.gap){
+    const g = +t.dataset.gap;
+    s.cuts = s.cuts.includes(g) ? s.cuts.filter(c=>c!==g) : [...s.cuts, g];
+    s.fb = null; s.wrong = []; focusKey = "g"+g;
+  } else if(t.dataset.start){
+    const st = t.dataset.start;
+    s.labels[st] = CYCLE[(CYCLE.indexOf(s.labels[st]||"")+1) % CYCLE.length];
+    s.wrong = s.wrong.filter(x=>x!==+st); s.fb = null; focusKey = "l"+st;
+  } else if(t.dataset.rate){
+    s.rating = t.dataset.rate;
+  } else {
+    const a = t.dataset.act;
+    if(a==="check") checkParts();
+    else if(a==="show"){
+      s.cuts = correctCuts(W); s.labels = {};
+      piecesFrom(s.cuts, W.w.length).forEach((p,i)=> s.labels[p.start] = W.parts[i][1][0]);
+      s.partsDone = true; s.shown = true; s.fb = null; s.wrong = []; focusKey = "pred";
+    }
+    else if(a==="predict"){
+      if(!s.prediction.trim()){ predictMsg = "Write your prediction first, then check it."; render(); return; }
+      s.checked = true;
+    }
+    else if(a==="prev"){ cur = Math.max(0, cur-1); window.scrollTo(0,0); }
+    else if(a==="next"){ if(cur===WORDS.length-1) view = "review"; else cur++; window.scrollTo(0,0); }
+    else if(a==="back"){ view = "word"; }
+    else if(a==="print"){ window.print(); return; }
+    else if(a==="reset"){
+      if(!confirm("Clear all your answers and start over?")) return;
+      S = fresh(); cur = 0; view = "word";
+    }
+  }
+  predictMsg = "";
+  save(); render();
+});
+app.addEventListener("input", e=>{
+  if(e.target.id === "pred"){ S[cur].prediction = e.target.value; save(); }
+});
+dots.addEventListener("click", e=>{
+  const t = e.target.closest("button"); if(!t) return;
+  if(t.dataset.go !== undefined){ cur = +t.dataset.go; view = "word"; }
+  else if(t.dataset.act === "review") view = "review";
+  predictMsg = ""; save(); render();
+});
+
+load(); render();
+</script>
+</body>
+</html>
