@@ -113,7 +113,7 @@ textarea:disabled{opacity:.8}
 .rate p{margin:0 0 8px}
 .rate .btn.on{background:var(--prefix);border-color:var(--prefix);color:#fff}
 
-.nav{display:flex;justify-content:space-between;gap:10px;margin-top:18px}
+.nav{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;margin-top:18px}
 
 /* review */
 .summary{font-size:18px;margin:0 0 18px}
@@ -164,14 +164,12 @@ const dots = document.getElementById("dots");
 let S, cur = 0, view = "word", focusKey = null, predictMsg = "";
 
 function fresh(){ return WORDS.map(()=>({cuts:[], labels:{}, tries:0, partsDone:false, firstTry:false, shown:false, fb:null, wrong:[], prediction:"", checked:false, rating:null})); }
+// Every visit starts fresh: clear anything an older version saved, and don't save new progress.
 function load(){
-  try{
-    const d = JSON.parse(localStorage.getItem(KEY));
-    if(d && Array.isArray(d.S) && d.S.length === WORDS.length){ S = d.S; cur = Math.min(d.cur||0, WORDS.length-1); return; }
-  }catch(e){}
-  S = fresh();
+  try{ localStorage.removeItem(KEY); }catch(e){}
+  S = fresh(); cur = 0;
 }
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify({S, cur})); }catch(e){} }
+function save(){}
 const esc = t => String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 function correctCuts(W){ let p=0; return W.parts.slice(0,-1).map(x => (p += x[0].length)); }
@@ -268,6 +266,7 @@ function renderWord(){
     h += `</section>`;
   }
   h += `<div class="nav"><button class="btn quiet" data-act="prev" ${cur===0?"disabled":""}>Previous word</button>
+    <button class="btn quiet" data-act="reset">Start over</button>
     <button class="btn${s.rating?"":" quiet"}" data-act="next">${cur===WORDS.length-1?"See my answers":"Next word"}</button></div>`;
   app.innerHTML = h;
 }
@@ -361,7 +360,7 @@ app.addEventListener("click", e=>{
     else if(a==="print"){ window.print(); return; }
     else if(a==="reset"){
       if(!confirm("Clear all your answers and start over?")) return;
-      S = fresh(); cur = 0; view = "word";
+      S = fresh(); cur = 0; view = "word"; window.scrollTo(0,0);
     }
   }
   predictMsg = "";
